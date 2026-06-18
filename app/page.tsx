@@ -171,24 +171,19 @@ export default function Home() {
 
       {/* Navbar */}
       <header className="flex items-center justify-between px-8 py-6 border-b border-white/10">
-        <div className="flex items-center gap-3">
+        <a
+          href="https://skalarsolutions.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+        >
           <img
             src="/icon.png"
             alt="Skalar Logo"
             className="w-8 h-8 object-contain"
           />
           <span className="text-xl font-semibold tracking-tight">Skalar Solutions</span>
-        </div>
-        <nav>
-          <a
-            href="https://skalarsolutions.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-white/60 hover:text-white transition-colors"
-          >
-            Skalar Solution Site
-          </a>
-        </nav>
+        </a>
       </header>
 
       {/* Main Content */}
@@ -218,7 +213,7 @@ export default function Home() {
                 <input
                   value={targetUrl}
                   onChange={(event) => setTargetUrl(event.target.value)}
-                  placeholder="https://example.com/very-long-url-path"
+                  placeholder="Enter your long URL"
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 outline-none focus:border-white focus:bg-white/10 transition-all"
                   required
                 />
@@ -226,7 +221,7 @@ export default function Home() {
 
               <div className="space-y-2 md:col-span-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
-                  Custom Slug (Optional)
+                  Custom
                 </label>
                 <div className="flex items-center gap-3">
                   <span className="text-white font-semibold whitespace-nowrap tracking-tight">
@@ -235,7 +230,7 @@ export default function Home() {
                   <input
                     value={customSlug}
                     onChange={(event) => setCustomSlug(event.target.value)}
-                    placeholder="campaign-name"
+                    placeholder="Enter your short URL"
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 outline-none focus:border-white focus:bg-white/10 transition-all"
                   />
                 </div>
