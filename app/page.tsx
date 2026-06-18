@@ -1,23 +1,52 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import Script from "next/script";
+import { FormEvent, useEffect, useState } from "react";
+
+declare global {
+  interface Window {
+    onTurnstileSuccess?: (token: string) => void;
+  }
+}
 
 export default function Home() {
   const [targetUrl, setTargetUrl] = useState("");
   const [customSlug, setCustomSlug] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
   const [shortUrl, setShortUrl] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const apiBase =
+    process.env.NEXT_PUBLIC_API_BASE || "https://go.skalarsolutions.com";
+
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+
+  useEffect(() => {
+    window.onTurnstileSuccess = (token: string) => {
+      setTurnstileToken(token);
+    };
+
+    return () => {
+      delete window.onTurnstileSuccess;
+    };
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setError("");
     setShortUrl("");
+
+    if (!turnstileToken) {
+      setError("Selesaikan verifikasi dulu.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const response = await fetch("https://go.skalarsolutions.com/api/shorten", {
+      const response = await fetch(`${apiBase}/api/shorten`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -25,6 +54,7 @@ export default function Home() {
         body: JSON.stringify({
           targetUrl,
           customSlug,
+          turnstileToken,
         }),
       });
 
@@ -49,6 +79,12 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+        async
+        defer
+      />
+
       <section className="w-full max-w-xl rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl">
         <p className="text-sm text-slate-400">Skalar Solutions</p>
 
@@ -90,6 +126,18 @@ export default function Home() {
               />
             </div>
           </div>
+
+          {siteKey ? (
+            <div
+              className="cf-turnstile"
+              data-sitekey={siteKey}
+              data-callback="onTurnstileSuccess"
+            />
+          ) : (
+            <p className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-100">
+              Turnstile site key belum diset.
+            </p>
+          )}
 
           <button
             type="submit"
