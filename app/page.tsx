@@ -161,6 +161,10 @@ export default function Home() {
     });
   }
 
+  function displayUrl(value: string) {
+    return value.replace(/^https?:\/\//, "");
+  }
+
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-white selection:text-black flex flex-col">
       <Script
@@ -286,7 +290,7 @@ export default function Home() {
             </h3>
             <div className="flex items-center gap-3">
               <div className="flex-1 bg-black border border-white/10 rounded-lg px-4 py-3 text-white font-medium truncate">
-                {shortUrl}
+                {displayUrl(shortUrl)}
               </div>
               <button
                 type="button"
@@ -315,7 +319,7 @@ export default function Home() {
                   <div className="flex justify-between items-start mb-4">
                     <div className="overflow-hidden pr-4">
                       <p className="font-semibold text-white truncate text-lg">
-                        {link.shortUrl}
+                        {displayUrl(link.shortUrl)}
                       </p>
                       <p className="text-sm text-white/40 truncate mt-1">
                         {link.targetUrl}
