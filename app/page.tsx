@@ -229,7 +229,7 @@ export default function Home() {
                 </label>
                 <div className="flex items-center gap-3">
                   <span className="text-white font-semibold whitespace-nowrap tracking-tight">
-                    go.skalarsolutions.com/
+                    skalar.cc/
                   </span>
                   <input
                     value={customSlug}
