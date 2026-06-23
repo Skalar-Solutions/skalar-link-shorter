@@ -1,7 +1,9 @@
 "use client";
 
 import Script from "next/script";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState, useRef } from "react";
+import type QRCodeStylingType from "qr-code-styling";
+import type { DotType, CornerSquareType, Options } from "qr-code-styling";
 
 type LinkItem = {
   slug: string;
@@ -23,6 +25,9 @@ declare global {
 }
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<"shorten" | "qr">("shorten");
+
+  // Shorten states
   const [targetUrl, setTargetUrl] = useState("");
   const [customSlug, setCustomSlug] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
@@ -31,6 +36,18 @@ export default function Home() {
   const [copiedUrl, setCopiedUrl] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // QR Generator states
+  const [qrUrl, setQrUrl] = useState("");
+  const [qrColorType, setQrColorType] = useState<"solid" | "gradient">("solid");
+  const [qrSolidColor, setQrSolidColor] = useState("#ffffff");
+  const [qrGradientColor1, setQrGradientColor1] = useState("#ffffff");
+  const [qrGradientColor2, setQrGradientColor2] = useState("#a855f7");
+  const [qrBodyPattern, setQrBodyPattern] = useState<DotType>("square");
+  const [qrEyePattern, setQrEyePattern] = useState<CornerSquareType>("square");
+  
+  const [qrCode, setQrCode] = useState<QRCodeStylingType | null>(null);
+  const qrRef = useRef<HTMLDivElement>(null);
 
   const apiBase =
     process.env.NEXT_PUBLIC_API_BASE || "https://go.skalarsolutions.com";
@@ -60,6 +77,81 @@ export default function Home() {
       delete window.onTurnstileError;
     };
   }, []);
+
+  // Initialize QR Code generator
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      import("qr-code-styling").then((module) => {
+        const QRCodeStyling = module.default;
+        const qr = new QRCodeStyling({
+          width: 260,
+          height: 260,
+          data: "https://skalarsolutions.com",
+          margin: 5,
+          qrOptions: {
+            typeNumber: 0,
+            mode: "Byte",
+            errorCorrectionLevel: "Q"
+          },
+          imageOptions: {
+            hideBackgroundDots: true,
+            imageSize: 0.4,
+            margin: 0
+          },
+          dotsOptions: {
+            type: "square",
+            color: "#ffffff"
+          },
+          backgroundOptions: {
+            color: "transparent"
+          },
+          cornersSquareOptions: {
+            type: "square",
+            color: "#ffffff"
+          }
+        });
+        setQrCode(qr);
+      });
+    }
+  }, []);
+
+  // Mount QR Canvas
+  useEffect(() => {
+    if (qrCode && qrRef.current && activeTab === "qr") {
+      qrRef.current.innerHTML = "";
+      qrCode.append(qrRef.current);
+    }
+  }, [qrCode, qrRef, activeTab]);
+
+  // Update QR Code settings
+  useEffect(() => {
+    if (!qrCode) return;
+    
+    const dotsOptions: NonNullable<Options["dotsOptions"]> = { type: qrBodyPattern };
+    const cornersSquareOptions: NonNullable<Options["cornersSquareOptions"]> = { type: qrEyePattern };
+    
+    if (qrColorType === "solid") {
+      dotsOptions.color = qrSolidColor;
+      cornersSquareOptions.color = qrSolidColor;
+    } else {
+      const gradient: NonNullable<Options["dotsOptions"]>["gradient"] = {
+        type: "linear",
+        rotation: 0,
+        colorStops: [
+          { offset: 0, color: qrGradientColor1 },
+          { offset: 1, color: qrGradientColor2 }
+        ]
+      };
+      dotsOptions.gradient = gradient;
+      cornersSquareOptions.gradient = gradient;
+    }
+
+    qrCode.update({
+      data: qrUrl || "https://skalarsolutions.com",
+      dotsOptions,
+      cornersSquareOptions
+    });
+  }, [qrUrl, qrColorType, qrSolidColor, qrGradientColor1, qrGradientColor2, qrBodyPattern, qrEyePattern, qrCode]);
 
   function loadLinks() {
     try {
@@ -128,10 +220,10 @@ export default function Home() {
     }
   }
 
-  async function copyText(text: string) {
+  async function copyText(text: string, isQr: boolean = false) {
     try {
       await navigator.clipboard.writeText(text);
-      setCopiedUrl(text);
+      setCopiedUrl(isQr ? "qr" : text);
     } catch {
       const textarea = document.createElement("textarea");
       textarea.value = text;
@@ -144,12 +236,29 @@ export default function Home() {
       document.execCommand("copy");
       document.body.removeChild(textarea);
 
-      setCopiedUrl(text);
+      setCopiedUrl(isQr ? "qr" : text);
     }
 
     setTimeout(() => {
       setCopiedUrl("");
     }, 1600);
+  }
+
+  async function copyQrToClipboard() {
+    if (!qrCode) return;
+    try {
+      const rawData = await qrCode.getRawData("png");
+      if (!rawData) return;
+      const blob = rawData as Blob;
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob })
+      ]);
+      setCopiedUrl("qr");
+      setTimeout(() => setCopiedUrl(""), 1600);
+    } catch (err) {
+      console.error("Failed to copy", err);
+      alert("Failed to copy QR code to clipboard. Your browser might not support this feature.");
+    }
   }
 
   function formatDate(value: string) {
@@ -199,172 +308,369 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-20">
+      <main className="flex-1 flex flex-col items-center px-6 py-12 md:py-20">
+        
+        {/* Tab Navigation */}
+        <div className="w-full flex justify-center mb-10">
+          <div className="bg-white/5 p-1 rounded-lg border border-white/10 flex">
+            <button 
+              onClick={() => setActiveTab('shorten')}
+              className={`px-6 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === 'shorten' ? 'bg-white text-black shadow-sm' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+            >
+              Shorten a Link
+            </button>
+            <button 
+              onClick={() => setActiveTab('qr')}
+              className={`px-6 py-2.5 rounded-md text-sm font-medium transition-all ${activeTab === 'qr' ? 'bg-white text-black shadow-sm' : 'text-white/60 hover:text-white hover:bg-white/10'}`}
+            >
+              Create QR Code
+            </button>
+          </div>
+        </div>
+
         <div className="w-full max-w-3xl text-center space-y-6 mb-12">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-tight">
             Skalar Solutions
             <span className="block text-2xl md:text-3xl text-white/50 font-medium mt-4">
-              shortlink platform.
+              {activeTab === 'shorten' ? "shortlink platform." : "QR code generator."}
             </span>
           </h1>
           <p className="text-lg text-white/50 max-w-xl mx-auto">
-            Create branded, reliable shortlinks under the Skalar domain. Clean, fast, and enterprise-ready.
+            {activeTab === 'shorten' 
+              ? "Create branded, reliable shortlinks under the Skalar domain. Clean, fast, and enterprise-ready."
+              : "Generate customizable, high-quality QR codes instantly. Choose patterns, colors, and export easily."}
           </p>
         </div>
 
-        <div className="w-full max-w-3xl bg-white/5 border border-white/10 p-1 rounded-2xl backdrop-blur-sm">
-          <form
-            onSubmit={handleSubmit}
-            className="bg-black border border-white/10 rounded-xl p-8 shadow-2xl"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
-                  Destination URL
-                </label>
-                <input
-                  value={targetUrl}
-                  onChange={(event) => setTargetUrl(event.target.value)}
-                  placeholder="Enter your long URL"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 outline-none focus:border-white focus:bg-white/10 transition-all"
-                  required
-                />
-              </div>
+        {activeTab === 'shorten' && (
+          <>
+            <div className="w-full max-w-3xl bg-white/5 border border-white/10 p-1 rounded-2xl backdrop-blur-sm">
+              <form
+                onSubmit={handleSubmit}
+                className="bg-black border border-white/10 rounded-xl p-8 shadow-2xl"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                      Destination URL
+                    </label>
+                    <input
+                      value={targetUrl}
+                      onChange={(event) => setTargetUrl(event.target.value)}
+                      placeholder="Enter your long URL"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 outline-none focus:border-white focus:bg-white/10 transition-all"
+                      required
+                    />
+                  </div>
 
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
-                  Custom
-                </label>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                      Custom
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <span className="text-white font-semibold whitespace-nowrap tracking-tight">
+                        skalar.cc/
+                      </span>
+                      <input
+                        value={customSlug}
+                        onChange={(event) => setCustomSlug(event.target.value)}
+                        placeholder="Enter your short URL"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 outline-none focus:border-white focus:bg-white/10 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                  <div className="w-full md:w-auto min-h-[65px] flex items-center justify-center">
+                    {siteKey ? (
+                      <div
+                        className="cf-turnstile"
+                        data-sitekey={siteKey}
+                        data-callback="onTurnstileSuccess"
+                        data-expired-callback="onTurnstileExpired"
+                        data-error-callback="onTurnstileError"
+                        data-theme="dark"
+                      />
+                    ) : (
+                      <p className="text-xs text-white/40 border border-white/10 px-3 py-2 rounded">
+                        Verification unavailable
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full md:w-auto bg-white text-black font-semibold px-8 py-3 rounded-lg hover:bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isLoading ? "Shortening..." : "Shorten URL"}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {error && (
+              <div className="mt-6 w-full max-w-3xl bg-black border border-red-500/50 rounded-xl p-4 flex items-center gap-3">
+                <span className="text-red-500">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </span>
+                <p className="text-sm text-red-200">{error}</p>
+              </div>
+            )}
+
+            {shortUrl && (
+              <div className="mt-6 w-full max-w-3xl bg-white/5 border border-white/20 rounded-xl p-6">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">
+                  Your Shortlink
+                </h3>
                 <div className="flex items-center gap-3">
-                  <span className="text-white font-semibold whitespace-nowrap tracking-tight">
-                    skalar.cc/
-                  </span>
+                  <div className="flex-1 bg-black border border-white/10 rounded-lg px-4 py-3 text-white font-medium truncate">
+                    {displayUrl(shortUrl)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyText(shortUrl)}
+                    className="shrink-0 bg-white text-black font-semibold px-6 py-3 rounded-lg hover:bg-white/90 transition-colors w-[100px]"
+                  >
+                    {copiedUrl === shortUrl ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {links.length > 0 && (
+              <div className="mt-24 w-full max-w-4xl">
+                <div className="flex items-center justify-between mb-8 border-b border-white/10 pb-4">
+                  <h2 className="text-xl font-semibold tracking-tight">Recent Links</h2>
+                  <span className="text-sm text-white/50">{links.length} total</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {links.map((link) => (
+                    <div
+                      key={link.slug}
+                      className="group bg-black border border-white/10 hover:border-white/30 rounded-xl p-5 transition-all"
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="overflow-hidden pr-4">
+                          <p className="font-semibold text-white truncate text-lg">
+                            {displayUrl(link.shortUrl)}
+                          </p>
+                          <p className="text-sm text-white/40 truncate mt-1">
+                            {link.targetUrl}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => copyText(link.shortUrl)}
+                          className="shrink-0 bg-white/10 hover:bg-white text-white hover:text-black text-xs font-semibold px-3 py-1.5 rounded transition-colors"
+                        >
+                          {copiedUrl === link.shortUrl ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-6 pt-4 border-t border-white/5">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-white/40 mb-1">
+                            Clicks
+                          </p>
+                          <p className="text-sm font-medium text-white/80">
+                            {link.clickCount}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-white/40 mb-1">
+                            Created
+                          </p>
+                          <p className="text-sm font-medium text-white/80">
+                            {formatDate(link.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'qr' && (
+          <div className="w-full max-w-5xl bg-white/5 border border-white/10 p-1 rounded-2xl backdrop-blur-sm">
+            <div className="bg-black border border-white/10 rounded-xl p-6 md:p-10 shadow-2xl grid grid-cols-1 lg:grid-cols-5 gap-12">
+              
+              {/* Settings Panel */}
+              <div className="lg:col-span-3 space-y-8">
+                {/* URL Input */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                    Target URL
+                  </label>
                   <input
-                    value={customSlug}
-                    onChange={(event) => setCustomSlug(event.target.value)}
-                    placeholder="Enter your short URL"
+                    value={qrUrl}
+                    onChange={(e) => setQrUrl(e.target.value)}
+                    placeholder="https://skalarsolutions.com"
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/30 outline-none focus:border-white focus:bg-white/10 transition-all"
                   />
                 </div>
-              </div>
-            </div>
 
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-              <div className="w-full md:w-auto min-h-[65px] flex items-center justify-center">
-                {siteKey ? (
-                  <div
-                    className="cf-turnstile"
-                    data-sitekey={siteKey}
-                    data-callback="onTurnstileSuccess"
-                    data-expired-callback="onTurnstileExpired"
-                    data-error-callback="onTurnstileError"
-                    data-theme="dark"
-                  />
-                ) : (
-                  <p className="text-xs text-white/40 border border-white/10 px-3 py-2 rounded">
-                    Verification unavailable
-                  </p>
-                )}
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full md:w-auto bg-white text-black font-semibold px-8 py-3 rounded-lg hover:bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isLoading ? "Shortening..." : "Shorten URL"}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {error && (
-          <div className="mt-6 w-full max-w-3xl bg-black border border-red-500/50 rounded-xl p-4 flex items-center gap-3">
-            <span className="text-red-500">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-              </svg>
-            </span>
-            <p className="text-sm text-red-200">{error}</p>
-          </div>
-        )}
-
-        {shortUrl && (
-          <div className="mt-6 w-full max-w-3xl bg-white/5 border border-white/20 rounded-xl p-6">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">
-              Your Shortlink
-            </h3>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 bg-black border border-white/10 rounded-lg px-4 py-3 text-white font-medium truncate">
-                {displayUrl(shortUrl)}
-              </div>
-              <button
-                type="button"
-                onClick={() => copyText(shortUrl)}
-                className="shrink-0 bg-white text-black font-semibold px-6 py-3 rounded-lg hover:bg-white/90 transition-colors w-[100px]"
-              >
-                {copiedUrl === shortUrl ? "Copied!" : "Copy"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {links.length > 0 && (
-          <div className="mt-24 w-full max-w-4xl">
-            <div className="flex items-center justify-between mb-8 border-b border-white/10 pb-4">
-              <h2 className="text-xl font-semibold tracking-tight">Recent Links</h2>
-              <span className="text-sm text-white/50">{links.length} total</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {links.map((link) => (
-                <div
-                  key={link.slug}
-                  className="group bg-black border border-white/10 hover:border-white/30 rounded-xl p-5 transition-all"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="overflow-hidden pr-4">
-                      <p className="font-semibold text-white truncate text-lg">
-                        {displayUrl(link.shortUrl)}
-                      </p>
-                      <p className="text-sm text-white/40 truncate mt-1">
-                        {link.targetUrl}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => copyText(link.shortUrl)}
-                      className="shrink-0 bg-white/10 hover:bg-white text-white hover:text-black text-xs font-semibold px-3 py-1.5 rounded transition-colors"
-                    >
-                      {copiedUrl === link.shortUrl ? "Copied" : "Copy"}
-                    </button>
+                {/* Color Settings */}
+                <div className="space-y-4">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                    QR Color
+                  </label>
+                  <div className="flex gap-6 mb-3">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors ${qrColorType === "solid" ? "border-white" : "border-white/40 group-hover:border-white/80"}`}>
+                        {qrColorType === "solid" && <div className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
+                      <input 
+                        type="radio" 
+                        className="hidden"
+                        checked={qrColorType === "solid"} 
+                        onChange={() => setQrColorType("solid")} 
+                      />
+                      <span className="text-sm text-white/80 group-hover:text-white transition-colors">Solid Color</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors ${qrColorType === "gradient" ? "border-white" : "border-white/40 group-hover:border-white/80"}`}>
+                        {qrColorType === "gradient" && <div className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
+                      <input 
+                        type="radio" 
+                        className="hidden"
+                        checked={qrColorType === "gradient"} 
+                        onChange={() => setQrColorType("gradient")} 
+                      />
+                      <span className="text-sm text-white/80 group-hover:text-white transition-colors">Gradient</span>
+                    </label>
                   </div>
 
-                  <div className="flex items-center gap-6 pt-4 border-t border-white/5">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-white/40 mb-1">
-                        Clicks
-                      </p>
-                      <p className="text-sm font-medium text-white/80">
-                        {link.clickCount}
-                      </p>
+                  {qrColorType === "solid" ? (
+                    <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-lg p-3">
+                      <input 
+                        type="color" 
+                        value={qrSolidColor} 
+                        onChange={(e) => setQrSolidColor(e.target.value)}
+                        className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent p-0"
+                      />
+                      <span className="text-sm font-mono text-white/80 uppercase">{qrSolidColor}</span>
                     </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-white/40 mb-1">
-                        Created
-                      </p>
-                      <p className="text-sm font-medium text-white/80">
-                        {formatDate(link.createdAt)}
-                      </p>
+                  ) : (
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 flex-1 bg-white/5 border border-white/10 rounded-lg p-3">
+                        <input 
+                          type="color" 
+                          value={qrGradientColor1} 
+                          onChange={(e) => setQrGradientColor1(e.target.value)}
+                          className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent p-0"
+                        />
+                        <span className="text-sm font-mono text-white/80 uppercase">{qrGradientColor1}</span>
+                      </div>
+                      <span className="text-white/40 text-sm">to</span>
+                      <div className="flex items-center gap-4 flex-1 bg-white/5 border border-white/10 rounded-lg p-3">
+                        <input 
+                          type="color" 
+                          value={qrGradientColor2} 
+                          onChange={(e) => setQrGradientColor2(e.target.value)}
+                          className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent p-0"
+                        />
+                        <span className="text-sm font-mono text-white/80 uppercase">{qrGradientColor2}</span>
+                      </div>
                     </div>
+                  )}
+                </div>
+
+                {/* Body Patterns */}
+                <div className="space-y-4">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                    Body Patterns
+                  </label>
+                  <div className="flex gap-4">
+                    {(["square", "dots", "rounded"] as DotType[]).map(pattern => (
+                      <button
+                        key={pattern}
+                        onClick={() => setQrBodyPattern(pattern)}
+                        className={`w-14 h-14 rounded-xl border flex items-center justify-center transition-all ${qrBodyPattern === pattern ? 'border-white bg-white/10' : 'border-white/10 hover:border-white/30 bg-white/5'}`}
+                        title={pattern}
+                      >
+                        <div className={`w-6 h-6 bg-white ${pattern === 'rounded' ? 'rounded-md' : pattern === 'dots' ? 'rounded-full' : ''}`} />
+                      </button>
+                    ))}
                   </div>
                 </div>
-              ))}
+
+                {/* Eye Patterns */}
+                <div className="space-y-4">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                    External Eye Patterns
+                  </label>
+                  <div className="flex gap-4">
+                    {(["square", "dot", "extra-rounded"] as CornerSquareType[]).map(pattern => (
+                      <button
+                        key={pattern}
+                        onClick={() => setQrEyePattern(pattern)}
+                        className={`w-14 h-14 rounded-xl border flex items-center justify-center transition-all ${qrEyePattern === pattern ? 'border-white bg-white/10' : 'border-white/10 hover:border-white/30 bg-white/5'}`}
+                        title={pattern}
+                      >
+                        <div className={`w-8 h-8 border-[3px] border-white flex items-center justify-center ${pattern === 'extra-rounded' ? 'rounded-full' : pattern === 'dot' ? 'rounded-xl' : ''}`}>
+                          <div className={`w-2.5 h-2.5 bg-white ${pattern === 'extra-rounded' ? 'rounded-full' : pattern === 'dot' ? 'rounded-sm' : ''}`} />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Preview Panel */}
+              <div className="lg:col-span-2 flex flex-col items-center justify-center space-y-8 lg:border-l border-white/10 lg:pl-12 pt-8 lg:pt-0 border-t lg:border-t-0">
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-bold tracking-tight">Preview</h3>
+                  <p className="text-xs text-white/50">Scan to test your code</p>
+                </div>
+                
+                <div className="bg-white p-4 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.1)]">
+                  <div ref={qrRef} className="transition-all duration-300" />
+                </div>
+
+                <div className="w-full space-y-3">
+                  <p className="text-[10px] uppercase tracking-wider text-white/40 text-center mb-4">
+                    Generate Your QR Code as
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => qrCode?.download({ extension: "png" })}
+                      className="bg-white/10 hover:bg-white hover:text-black border border-white/10 text-white text-sm font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                      PNG
+                    </button>
+                    <button 
+                      onClick={() => qrCode?.download({ extension: "svg" })}
+                      className="bg-white/10 hover:bg-white hover:text-black border border-white/10 text-white text-sm font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                      SVG
+                    </button>
+                    <button 
+                      onClick={copyQrToClipboard}
+                      className="col-span-2 bg-white text-black text-sm font-semibold py-3 rounded-lg hover:bg-white/90 transition-colors flex items-center justify-center gap-2 mt-1"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                      {copiedUrl === "qr" ? "Copied!" : "Copy to Clipboard"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
+
       </main>
 
       {/* Footer */}
