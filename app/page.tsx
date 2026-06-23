@@ -283,8 +283,16 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans selection:bg-white selection:text-black flex flex-col">
-      <Script
+    <div className="min-h-screen bg-black text-white font-sans selection:bg-white selection:text-black relative overflow-hidden flex flex-col">
+      {/* Animated Lava Background */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-purple-600/30 rounded-full mix-blend-screen filter blur-[120px] animate-blob" />
+        <div className="absolute top-[20%] right-[-10%] w-96 h-96 bg-blue-600/30 rounded-full mix-blend-screen filter blur-[120px] animate-blob animation-delay-2000" />
+        <div className="absolute bottom-[-20%] left-[20%] w-[30rem] h-[30rem] bg-pink-600/20 rounded-full mix-blend-screen filter blur-[120px] animate-blob animation-delay-4000" />
+      </div>
+
+      <div className="relative z-10 flex flex-col flex-1">
+        <Script
         src="https://challenges.cloudflare.com/turnstile/v0/api.js"
         async
         defer
@@ -731,6 +739,7 @@ export default function Home() {
           </div>
         </div>
       </footer>
+      </div>
     </div>
   );
 }
