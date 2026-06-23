@@ -61,16 +61,11 @@ export default function Home() {
     };
   }, []);
 
-  async function loadLinks() {
+  function loadLinks() {
     try {
-      const response = await fetch(`${apiBase}/api/links`, {
-        method: "GET",
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setLinks(data.links || []);
+      const saved = localStorage.getItem("skalar_links_history");
+      if (saved) {
+        setLinks(JSON.parse(saved));
       }
     } catch {
       // History error can be ignored silently
@@ -110,7 +105,20 @@ export default function Home() {
       }
 
       setShortUrl(data.shortUrl);
-      await loadLinks();
+      
+      // Save to localStorage
+      const newSlug = data.slug || data.shortUrl?.split('/').pop() || customSlug || "link";
+      const newLink: LinkItem = {
+        slug: newSlug,
+        targetUrl: targetUrl,
+        clickCount: 0,
+        createdAt: new Date().toISOString(),
+        shortUrl: data.shortUrl,
+      };
+
+      const newLinks = [newLink, ...links];
+      setLinks(newLinks);
+      localStorage.setItem("skalar_links_history", JSON.stringify(newLinks));
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
